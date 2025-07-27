@@ -1,72 +1,150 @@
-# Ros2Go2Estimator 🦾
+# Ros2Go2Base 🦾
+
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-- 一种高精度里程计解决方案,
-- 基于纯运动学的双足/四足机器人位置估计算法，目前仅使用IMU、足压力传感器、关节角度和角速度，不依赖相机或Lidar，但可将信号融合进去，进一步提高估计精度;
-- 使用config.yaml进行话题名称设置.
+**Ros2Go2Base** 是四足/双足机器人在 **ROS 2 Humble / Ubuntu 22.04** 上的 **底层集成仓库**，主要负责
 
-## 📚 补充说明
-- 切换两足、四足无需在估计器内做模式切换;
-- 目前没有调整参数做补偿，工程使用时可进一步提升精度;
-- dds_rostopic包将宇树dds提供的信息转换和发布为标准ros2话题;
-- fusion_estimator包发布对应“base_link”的话题SMX/Odom和对应“base_link_2D”的话题SMX/Odom_2D;
-- message_handle包完成SMX/Odom和SMX/Odom_2D的tf，此外，将frame“utlidar_lidar”的pointcloud2转换为“base_link_2D”话题SMX/Scan;
-- sport_control包读取joystick输入和其他指令，使用unitree_sdk2提供的接口控制机器狗;
-- 使用SLAM Toolbox建图时额外ros2 launch sport_control slam_launch.py;
-- 使用Nav2导航时额外ros2 launch sport_control nav_launch.py;
-- 使用Amov机架跟踪时额外ros2 launch sport_control g1_launch.py;
-- SLAM Toolbox目前是纯里程计建图，请擅长SLAM的同志自行把地图匹配加进去;
-- Nav2同样请自行调整，加载的地图记得改成自己的;
-- 也适用于Ubuntu20.04 foxy系统，把apt install的软件改为-foxy-即可;
+* DDS ⇄ ROS 2 桥接
+* Unitree SDK v2 运动控制
+* 点云 → Scan、TF 树发布
+* Launch/配置统一管理
+
+配合生态中的其它仓库，即可快速搭建 **驱动 → 估计 → 感知 → 交互** 的完整闭环系统。
+
+---
+
+## 📚 关键特性
+
+| 类别                         | 说明                                                            |
+| -------------------------- | ------------------------------------------------------------- |
+| **高精度里程计**                 | 完全基于 **纯运动学**：IMU + 足端力传感器 + 关节角度/速度；无需相机 / LiDAR，可选融合进一步提高精度 |
+| **双足 / 四足自适应**             | 不需要在估计算法里显式切模式，直接切步态即可                                        |
+| **全 ROS 2 话题接口**           | 通过 `config.yaml` 可自由修改话题名；默认全部使用 `SMX/*` 命名空间                 |
+| **可选 SLAM Toolbox / Nav2** | 提供现成 Launch，可在纯里程计地图、导航基础上快速扩展                                |
+| **Ubuntu 20.04 Foxy 兼容**   | apt 依赖包名替换 `-foxy-` 即可在 Foxy 运行                               |
+
+---
+
+## 🏗️ 生态仓库一览
+
+| 范畴       | 仓库                                                                                                   | 功能简介                             |
+| -------- | ---------------------------------------------------------------------------------------------------- | -------------------------------- |
+| **底层驱动** | **Ros2Go2Base (本仓库)**                                                                                | DDS 桥、Unitree SDK2 控制、点云→Scan、TF |
+| 里程计      | [https://github.com/ShineMinxing/Ros2Go2Estimator](https://github.com/ShineMinxing/Ros2Go2Estimator) | 纯运动学多传感器融合                       |
+| 语音 / LLM | [https://github.com/ShineMinxing/Ros2Chat](https://github.com/ShineMinxing/Ros2Chat)                 | 离线 ASR + OpenAI Chat + 语音合成      |
+| 图像处理     | [https://github.com/ShineMinxing/Ros2ImageProcess](https://github.com/ShineMinxing/Ros2ImageProcess) | 相机、光点/人脸/无人机检测                   |
+| 吊舱跟随     | [https://github.com/ShineMinxing/Ros2AmovG1](https://github.com/ShineMinxing/Ros2AmovG1)             | Amov G1 吊舱控制、目标跟踪                |
+| 工具集      | [https://github.com/ShineMinxing/Ros2Tools](https://github.com/ShineMinxing/Ros2Tools)               | 蓝牙 IMU、手柄映射、吊舱闭环、数据采集            |
+
+> ⚠️ 按需克隆：若只想驱动底盘，可 **仅使用本仓库**。其它仓库互不强依赖。
+
+---
+
+## 📂 本仓库结构
+
+```text
+Ros2Go2Base/
+├── config.yaml            # 全局话题 & 网络配置
+├── dds_rostopic/          # DDS → ROS2 桥
+├── sport_control/         # 手柄 & 指令 → Unitree SDK2
+├── message_handle/        # 点云→Scan、TF / Frame 处理
+├── unitree_sdk2/          # 官方 C++ SDK (git submodule)
+├── local_file/            # 数据录制 / 回放
+└── other/                 # Launch、RViz 配置
+```
+
+### 主要包说明
+
+* **dds\_rostopic** – 监听 Unitree DDS，发布 `/SMX/*` 传感器话题
+* **sport\_control** – 订阅 `/SMX/SportCmd` & 手柄指令，将其映射为 SDK2 API（站立 / 坐 / 行走等）
+* **message\_handle** – 将 `utlidar_lidar` 点云转换成 2D `/SMX/Scan`，并发布 `base_link*` TF
+* **local\_file** – CSV / 视频录制、回放脚本
+
+---
+
+## ⚙️ 安装与编译
+
+```bash
+# 1. 安装依赖
+sudo apt update && sudo apt install -y \
+  ros-humble-rmw-cyclonedds-cpp ros-humble-pcl-ros \
+  ros-humble-slam-toolbox ros-humble-nav2-bringup \
+  ros-humble-joy python3-pip libeigen3-dev libpoco-dev
+pip3 install openai httpx pydub vosk pygame pyttsx3
+
+# 2. 创建工作空间并克隆
+mkdir -p ~/ros2_ws/LeggedRobot/src && cd ~/ros2_ws/LeggedRobot/src
+
+# ↓↓↓ 必要仓库 ↓↓↓
+git clone --recursive https://github.com/ShineMinxing/Ros2Go2Base.git
+
+# ↓↓↓ 可选功能仓库 ↓↓↓
+git clone https://github.com/ShineMinxing/Ros2Go2Estimator.git
+git clone https://github.com/ShineMinxing/Ros2Chat.git
+git clone https://github.com/ShineMinxing/Ros2ImageProcess.git
+git clone https://github.com/ShineMinxing/Ros2AmovG1.git
+git clone https://github.com/ShineMinxing/Ros2Tools.git
+
+# 3. 配置
+#   - 搜索并替换 "~/ros2_ws/LeggedRobot" 为你的路径
+#   - 将 config.yaml 内 network_interface 设置为本机网卡 (如 enxf8e43b808e06)
+
+# 4. 编译
+cd ~/ros2_ws/LeggedRobot
+source /opt/ros/humble/setup.bash
+colcon build --symlink-install
+source install/setup.bash
+```
+
+---
+
+## 🚀 启动示例
+
+```bash
+# (1) 基础驱动
+ros2 launch sport_control go2_launch.py
+
+# (2) 纯里程计建图
+ros2 launch sport_control slam_launch.py
+
+# (3) Nav2 导航
+ros2 launch sport_control nav_launch.py
+
+# (4) 吊舱跟随 (Amov G1)
+ros2 launch sport_control g1_launch.py
+
+# (5) 语音交互
+ros2 run voice_chat voice_chat_node
+```
+
+> **RT+左摇杆**=行走、**RT+右摇杆**=转向。全部映射详见 `sport_control_node.cpp control_message_node.cpp`。
+
+---
 
 ## 🎥 视频演示
-### 最新进展(点击图片进入视频)
-纯里程计站立/四足切换建图效果
-[![主演示视频](https://i1.hdslb.com/bfs/archive/4f60453cb37ce5e4f593f03084dbecd0fdddc27e.jpg)](https://www.bilibili.com/video/BV1UtQfYJExu)
 
-#### 实验记录
-1. 站立行走误差1%，四足行走误差0.5%
-[![实验1](https://i1.hdslb.com/bfs/archive/10e501bc7a93c77c1c3f41f163526b630b0afa3f.jpg)](https://www.bilibili.com/video/BV18Q9JYEEdn/)
+| 主题               | 点击图片观看                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 纯里程计建图 (站立/四足切换) | [![img](https://i1.hdslb.com/bfs/archive/4f60453cb37ce5e4f593f03084dbecd0fdddc27e.jpg)](https://www.bilibili.com/video/BV1UtQfYJExu)  |
+| 行走误差 0.5 %‑1 %   | [![img](https://i1.hdslb.com/bfs/archive/10e501bc7a93c77c1c3f41f163526b630b0afa3f.jpg)](https://www.bilibili.com/video/BV18Q9JYEEdn/) |
+| 爬楼梯高度误差 < 5 cm   | [![img](https://i0.hdslb.com/bfs/archive/c469a3dd37522f6b7dcdbdbb2c135be599eefa7b.jpg)](https://www.bilibili.com/video/BV1VV9ZYZEcH/) |
+| 380 m 距离偏差 3.3 % | [![img](https://i0.hdslb.com/bfs/archive/481731d2db755bbe087f44aeb3f48db29c159ada.jpg)](https://www.bilibili.com/video/BV1BhRAYDEsV/) |
+| 语音交互 + 地图导航      | [![img](https://i2.hdslb.com/bfs/archive/5b95c6eda3b6c9c8e0ba4124c1af9f3da10f39d2.jpg)](https://www.bilibili.com/video/BV1HCQBYUEvk/) |
+| 吊舱协同光点/人脸跟踪      | [![img](https://i0.hdslb.com/bfs/archive/5496e9d0b40915c62b69701fd1e23af7d6ffe7de.jpg)](https://www.bilibili.com/video/BV1faG1z3EFF/) |
 
-2. 爬楼梯高度误差小于5cm
-[![实验2](https://i0.hdslb.com/bfs/archive/c469a3dd37522f6b7dcdbdbb2c135be599eefa7b.jpg)](https://www.bilibili.com/video/BV1VV9ZYZEcH/)
+---
 
-3. 长距离测试，受磁场变化影响，380米运动偏差3.3%
-[![实验3](https://i0.hdslb.com/bfs/archive/481731d2db755bbe087f44aeb3f48db29c159ada.jpg)](https://www.bilibili.com/video/BV1BhRAYDEsV/)
+## 📄 深入阅读
 
-4. 语音控制机器狗，实现意图猜测和在预建地图导航。比如说“没有纸张了”，自动执行导航‘去仓库’
-[![实验4](https://i2.hdslb.com/bfs/archive/5b95c6eda3b6c9c8e0ba4124c1af9f3da10f39d2.jpg)](https://www.bilibili.com/video/BV1HCQBYUEvk/)
-- 额外安装https://github.com/ShineMinxing/Ros2Chat
+* 技术原理笔记：[https://www.notion.so/Ros2Go2-1e3a3ea29e778044a4c9c35df4c27b22](https://www.notion.so/Ros2Go2-1e3a3ea29e778044a4c9c35df4c27b22)
+* ROS1 版本参考：[https://github.com/ShineMinxing/FusionEstimation](https://github.com/ShineMinxing/FusionEstimation)
 
-5. 机器狗与吊舱的协同光点/人脸跟踪
-[![实验5](https://i0.hdslb.com/bfs/archive/5496e9d0b40915c62b69701fd1e23af7d6ffe7de.jpg)](https://www.bilibili.com/video/BV1faG1z3EFF/)
-- 额外安装https://github.com/ShineMinxing/Ros2ImageProcess.git
-- 额外安装https://github.com/ShineMinxing/Ros2AmovG1.git
+---
 
-## ⚙️ 安装指南
+## 📨 联系我们
 
-- Use Ubuntu 22.04, ROS2 Humble
-```bash
-sudo apt install ros-humble-joy ros-humble-nav2-msgs ros-humble-slam-toolbox ros-humble-nav2-bringup python3-pip libopencv-dev ros-humble-cv-bridge ros-humble-image-transport ros-humble-compressed-image-transport
-mkdir -p ~/ros2_ws/LeggedRobot/src && cd ~/ros2_ws/LeggedRobot/src
-git clone --recursive https://github.com/ShineMinxing/Ros2Go2Estimator.git
-cd ..
-# 1. 搜索工程中的所有 /home/unitree/ros2_ws/LeggedRobot，替换为您的路径
-# 2. 把 src/Ros2Go2Estimator/config.yaml 中的所有 br0 替换为您的网卡名，如 enxf8e43b808e06
-colcon build
-ros2 launch sport_control go2_launch.py
-```
-- 同时按下手柄的LT、RT，解锁/锁定手柄；按住RT+左摇杆进行移动；按住RT+右摇杆进行旋转；更多操作请看sport_control_node.cpp。
+| 邮箱                                          | 单位           |
+| ------------------------------------------- | ------------ |
+| [401435318@qq.com](mailto:401435318@qq.com) | 中国科学院光电技术研究所 |
 
-## 📄 相关文档
-- 核心算法原理: [技术文档](https://www.notion.so/Ros2Go2-1e3a3ea29e778044a4c9c35df4c27b22)
-- 历史项目参考: [Aliengo ROS1项目](https://github.com/ShineMinxing/FusionEstimation.git)
-
-## 📧 联系我们
-``` 
-博士团队: 401435318@qq.com  
-研究所: 中国科学院光电技术研究所
-```
-
-> 📌 注意：当前为开发预览版，完整文档正在编写中
-``
+> 📌 **本仓库仍在持续开发中** — 欢迎 Issue / PR 交流、贡献！
