@@ -16,8 +16,9 @@
 #include <iomanip>
 #include <Eigen/Geometry>
 #include <unitree/robot/go2/sport/sport_client.hpp>
-#include <unitree/robot/b2/motion_switcher/motion_switcher_client.hpp>
 #include <unitree/robot/go2/vui/vui_client.hpp>
+#include <unitree/robot/go2/obstacles_avoid/obstacles_avoid_client.hpp>
+
 
 class SportControlNode : public rclcpp::Node
 {
@@ -48,17 +49,26 @@ public:
         sport_client->SetTimeout(10.0f);
         sport_client->Init();
 
-        Last_Operation = Last_Operation + "; SpeedLevel 1";
-        CurrentErrorCode = sport_client->ClassicWalk(1);
-        Last_Operation = Last_Operation + "; ClassicWalk";
-        sport_client->AutoRecoverSet(0);
-        sport_client->AutoRecoverGet(AutoRecoverEnable);
-        Last_Operation = Last_Operation + "; AutoRecoverEnable: " + std::to_string(AutoRecoverEnable);
-        Last_Operation_Time = this->now();
-
         Vui_client = std::make_unique<unitree::robot::go2::VuiClient>();
         Vui_client->SetTimeout(1.0f); 
         Vui_client->Init();
+
+        Avoid_client = std::make_unique<unitree::robot::go2::ObstaclesAvoidClient>();
+        Avoid_client->SetTimeout(1.0f); 
+        Avoid_client->Init();
+        Avoid_client->SwitchSet(1);
+        Avoid_client->SwitchGet(ObstaclesAvoidEnable);
+        Last_Operation = Last_Operation + "; ObstaclesAvoidEnable: " + std::to_string(ObstaclesAvoidEnable);
+        Last_Operation_Time = this->now();
+
+        CurrentErrorCode = sport_client->ClassicWalk(1);
+        sport_client->AutoRecoverSet(1);
+        sport_client->AutoRecoverGet(AutoRecoverEnable);
+
+        Last_Operation = Last_Operation + "; SpeedLevel 1";
+        Last_Operation = Last_Operation + "; ClassicWalk";
+        Last_Operation = Last_Operation + "; AutoRecoverEnable: " + std::to_string(AutoRecoverEnable);
+        Last_Operation_Time = this->now();
 
         RCLCPP_INFO(this->get_logger(), "SportControlNode 已启动");
         state_print();
@@ -73,6 +83,7 @@ private:
 
     std::unique_ptr<unitree::robot::go2::SportClient> sport_client;
     std::unique_ptr<unitree::robot::go2::VuiClient> Vui_client;
+    std::unique_ptr<unitree::robot::go2::ObstaclesAvoidClient> Avoid_client;
 
     rclcpp::Subscription<std_msgs::msg::Float64MultiArray>::SharedPtr sport_cmd_sub_;
 
@@ -88,6 +99,7 @@ private:
     int32_t CurrentErrorCode = 0;
     int32_t LastErrorCode = 0;
 
+    bool ObstaclesAvoidEnable = 0;
     bool AutoRecoverEnable = 1;
     bool ForwardClimbingEnable = 0;
     bool ContinuousGaitEnable = 0;
@@ -229,10 +241,10 @@ private:
                 CurrentErrorCode = sport_client->StopMove();
                 break;
             case 25202123:
-                if(Value1 || Value2 || Value3 ||MotionFlag)
+                if(Value1 || Value2 || Value3 || Value4 ||MotionFlag)
                 {
                     float Leftward_Speed = 1 * SpeedScalse * Value1;
-                    float Forward_Speed = 2.5 * SpeedScalse * Value2;
+                    float Forward_Speed = 2.5 * SpeedScalse * Value2 + 2.5 * SpeedScalse * Value4;
                     float Turning_Speed = 4 * SpeedScalse * Value3;
         
                     if(Forward_Speed>=0)
@@ -292,14 +304,16 @@ private:
                 CurrentErrorCode = sport_client->StandDown();
                 break;
             case 25120000:
-                Last_Operation = "Classic Walk. ";
+                Last_Operation = "Classic Walk and Obstacle Avoid Start. ";
                 Last_Operation_Time = this->get_clock()->now();
                 CurrentErrorCode = sport_client->ClassicWalk(1);
+                Avoid_client->SwitchSet(1);
                 break;
             case 25130000:
-                Last_Operation = "Agile Walk. ";
+                Last_Operation = "Agile Walk and Obstacle Avoid Stop. ";
                 Last_Operation_Time = this->get_clock()->now();
                 CurrentErrorCode = sport_client->ClassicWalk(0);
+                Avoid_client->SwitchSet(0);
                 break;
             case 25140000:
                 Last_Operation = "Reset Estimator Position. ";
