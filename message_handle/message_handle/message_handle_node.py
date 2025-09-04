@@ -90,8 +90,8 @@ class MessageHandleNode(Node):
             Odometry, self.sub_odom2d_topic, self.odom2d_callback, 10)
 
         # 发布两条静态 TF
-        self.publish_base_to_utlidar_transform()
-        self.publish_map_to_odom_transform()
+        self.create_timer(0.2, self.publish_base_to_utlidar_transform, callback_group=None)
+        self.create_timer(0.3, self.publish_map_to_odom_transform, callback_group=None)
 
         self.get_logger().info("MessageHandleNode 已启动")
 

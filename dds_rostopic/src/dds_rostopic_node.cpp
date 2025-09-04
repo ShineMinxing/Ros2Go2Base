@@ -118,9 +118,10 @@ private:
   {
     auto dds_msg = static_cast<const sensor_msgs::msg::dds_::PointCloud2_*>(message);
     sensor_msgs::msg::PointCloud2 cloud;
-    cloud.header.stamp.sec     = dds_msg->header().stamp().sec();
-    cloud.header.stamp.nanosec = dds_msg->header().stamp().nanosec();
-    cloud.header.frame_id      = dds_msg->header().frame_id();
+    cloud.header.stamp = this->get_clock()->now();
+    cloud.header.frame_id = dds_msg->header().frame_id().empty()
+                          ? "utlidar_lidar"
+                          : dds_msg->header().frame_id();
     cloud.height = dds_msg->height();
     cloud.width  = dds_msg->width();
     cloud.fields.resize(dds_msg->fields().size());
