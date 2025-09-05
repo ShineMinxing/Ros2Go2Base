@@ -1,22 +1,61 @@
-import launch
-from launch_ros.actions import Node
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, TimerAction  # 新增 TimerAction
+from launch_ros.actions import Node
+import os
 
 def generate_launch_description():
     return LaunchDescription([
-        ExecuteProcess(
-            cmd=[
-                "x-terminal-emulator",
-                "--new-process",
-                "-e",
-                'bash',
-                '-c',
-                'source ~/.bashrc && '
-                'ros2 run image_transport republish compressed raw   --ros-args     --remap in/compressed:=/SMX/GimbalCamera_Compressed     --remap out:=/SMX/GimbalCamera & '
-                'read -p "Press enter to close"'
-            ],
-            output="screen",
+        Node(
+            package='ip_camera',
+            executable='ip_camera_node',
+            name='ip_camera_node',
+            output='screen',
+            emulate_tty=True,
         ),
-    ]
-)
+
+        Node(
+            package='usb_camera',
+            executable='usb_camera_node',
+            name='usb_camera_node',
+            output='screen',
+            emulate_tty=True,
+        ),
+
+        Node(
+            package='usb_camera',
+            executable='usb_camera_node',
+            name='usb_camera_node2',
+            output='screen',
+            emulate_tty=True,
+        ),
+
+        Node(
+            package='yolo_obb',
+            executable='yolo_obb_node',
+            name='yolo_obb_node',
+            output='screen',
+            emulate_tty=True,
+        ),
+
+        Node(
+            package='yolo_obb',
+            executable='yolo_obb_node',
+            name='yolo_obb_node2',
+            output='screen',
+            emulate_tty=True,
+        ),
+
+        Node(
+            package='yolo_obb',
+            executable='yolo_obb_node',
+            name='yolo_obb_node3',
+            output='screen',
+            emulate_tty=True,
+        ),
+
+        Node(
+            package='rviz2', 
+            executable='rviz2',
+            output='screen',
+            arguments=['-d', os.path.expanduser('~/ros2_ws/LeggedRobot/src/Ros2Go2Base/other/SMXFE_odm.rviz')]
+        ),
+    ])
