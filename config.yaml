@@ -49,15 +49,25 @@ message_handle_node:
     odom_frame: "odom"
     base_frame: "base_link"
     base_frame_2d: "base_link_2D"
-    utlidar_frame: "utlidar_lidar"
 
     # 静态 TF 从 base_link 到 utlidar_lidar 的 translation + RPY
-    static_tx: 0.28945
-    static_ty: 0.0
-    static_tz: -0.046825
-    static_r: 0.0       # roll
-    static_p: 2.8782    # pitch
-    static_y: 0.0       # yaw
+    utlidar_frame: "utlidar_lidar"
+    static_X_Lidar: 0.28945
+    static_Y_Lidar: 0.0
+    static_Z_Lidar: -0.046825
+    static_r_Lidar: 0.0       # roll
+    static_p_Lidar: 2.8782    # pitch
+    static_y_Lidar: 0.0       # yaw
+
+    # 静态 TF 从 base_link 到 gimbal 的 translation + RPY
+    gimbal_frame: "gimbal"
+    pub_gimbal_odom_topic: "/SMX/Odom_gimbal"
+    static_X_Gimbal: 0.28945
+    static_Y_Gimbal: 0.0
+    static_Z_Gimbal: 0.18
+    static_r_Gimbal: 0.0    # roll
+    static_p_Gimbal: 0.0    # pitch
+    static_y_Gimbal: 0.0    # yaw
 
 sport_control_node:
   ros__parameters:

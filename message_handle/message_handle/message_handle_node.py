@@ -5,7 +5,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2, LaserScan, PointField
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Pose
 import sensor_msgs_py.point_cloud2 as pc2
 import tf2_ros
 
@@ -39,6 +39,52 @@ def euler_to_matrix(roll, pitch, yaw):
     Rz = np.array([[math.cos(yaw),-math.sin(yaw),0],[math.sin(yaw),math.cos(yaw),0],[0,0,1]])
     return Rz @ Ry @ Rx
 
+def pose_to_matrix(p: Pose) -> np.ndarray:
+    x, y, z = p.position.x, p.position.y, p.position.z
+    qx, qy, qz, qw = p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w
+    R = np.array([
+        [1-2*qy*qy-2*qz*qz,   2*qx*qy-2*qz*qw,     2*qx*qz+2*qy*qw],
+        [2*qx*qy+2*qz*qw,     1-2*qx*qx-2*qz*qz,   2*qy*qz-2*qx*qw],
+        [2*qx*qz-2*qy*qw,     2*qy*qz+2*qx*qw,     1-2*qx*qx-2*qy*qy]
+    ], dtype=np.float64)
+    T = np.eye(4); T[:3,:3] = R; T[:3,3] = [x, y, z]
+    return T
+
+def matrix_to_pose(T: np.ndarray) -> Pose:
+    R = T[:3,:3]
+    t = T[:3,3]
+    tr = np.trace(R)
+    if tr > 0:
+        S = np.sqrt(tr + 1.0) * 2
+        qw = 0.25 * S
+        qx = (R[2,1] - R[1,2]) / S
+        qy = (R[0,2] - R[2,0]) / S
+        qz = (R[1,0] - R[0,1]) / S
+    else:
+        i = np.argmax([R[0,0], R[1,1], R[2,2]])
+        if i == 0:
+            S = np.sqrt(1.0 + R[0,0] - R[1,1] - R[2,2]) * 2
+            qx = 0.25 * S
+            qy = (R[0,1] + R[1,0]) / S
+            qz = (R[0,2] + R[2,0]) / S
+            qw = (R[2,1] - R[1,2]) / S
+        elif i == 1:
+            S = np.sqrt(1.0 + R[1,1] - R[0,0] - R[2,2]) * 2
+            qx = (R[0,1] + R[1,0]) / S
+            qy = 0.25 * S
+            qz = (R[1,2] + R[2,1]) / S
+            qw = (R[0,2] - R[2,0]) / S
+        else:
+            S = np.sqrt(1.0 + R[2,2] - R[0,0] - R[1,1]) * 2
+            qx = (R[0,2] + R[2,0]) / S
+            qy = (R[1,2] + R[2,1]) / S
+            qz = 0.25 * S
+            qw = (R[1,0] - R[0,1]) / S
+    out = Pose()
+    out.position.x, out.position.y, out.position.z = t.tolist()
+    out.orientation.x, out.orientation.y, out.orientation.z, out.orientation.w = qx, qy, qz, qw
+    return out
+
 class MessageHandleNode(Node):
     def __init__(self, *, cli_args=None):
         super().__init__('message_handle_node', cli_args=cli_args)
@@ -62,14 +108,23 @@ class MessageHandleNode(Node):
         self.odom_frame      = p('odom_frame',     'odom').value
         self.base_frame      = p('base_frame',     'base_link').value
         self.base_frame_2d   = p('base_frame_2d',  'base_link_2D').value
-        self.utlidar_frame   = p('utlidar_frame',  'utlidar_lidar').value
 
-        self.static_tx = p('static_tx', 0.28945).value
-        self.static_ty = p('static_ty', 0.0).value
-        self.static_tz = p('static_tz', -0.046825).value
-        self.static_r  = p('static_r',  0.0).value
-        self.static_p  = p('static_p',  2.8782).value
-        self.static_y  = p('static_y',  0.0).value
+        self.utlidar_frame   = p('utlidar_frame',  'utlidar_lidar').value
+        self.static_X_Lidar = p('static_X_Lidar', 0.28945).value
+        self.static_Y_Lidar = p('static_Y_Lidar', 0.0).value
+        self.static_Z_Lidar = p('static_Z_Lidar', -0.046825).value
+        self.static_r_Lidar  = p('static_r_Lidar',  0.0).value
+        self.static_p_Lidar  = p('static_p_Lidar',  2.8782).value
+        self.static_y_Lidar  = p('static_y_Lidar',  0.0).value
+
+        self.gimbal_frame   = p('gimbal_frame',  'gimbal').value
+        self.pub_gimbal_odom_topic = p('pub_gimbal_odom_topic', '/SMX/Odom_gimbal').value
+        self.static_X_Gimbal = p('static_X_Gimbal', 0.28945).value  # 注意：大写 X
+        self.static_Y_Gimbal = p('static_Y_Gimbal', 0.0).value
+        self.static_Z_Gimbal = p('static_Z_Gimbal', 0.18).value
+        self.static_r_Gimbal  = p('static_r_Gimbal',  0.0).value
+        self.static_p_Gimbal  = p('static_p_Gimbal',  0.0).value
+        self.static_y_Gimbal  = p('static_y_Gimbal',  0.0).value
 
         # —— TF、订阅、发布 —— #
         self.tf_buffer    = tf2_ros.Buffer()
@@ -81,6 +136,7 @@ class MessageHandleNode(Node):
         self.sub_cloud = self.create_subscription(
             PointCloud2, self.sub_pc_topic, self.pointcloud_callback, 10)
         self.pub_scan  = self.create_publisher(LaserScan, self.pub_scan_topic, 10)
+        self.pub_gimbal_odom = self.create_publisher(Odometry, self.pub_gimbal_odom_topic, 10)
 
         self.odom_counter   = 0
         self.odom2d_counter = 0
@@ -89,9 +145,21 @@ class MessageHandleNode(Node):
         self.sub_odom2d = self.create_subscription(
             Odometry, self.sub_odom2d_topic, self.odom2d_callback, 10)
 
-        # 发布两条静态 TF
+        # 发布静态 TF（用定时器重复广播，避免 RViz 启动时错过）
         self.create_timer(0.2, self.publish_base_to_utlidar_transform, callback_group=None)
+        self.create_timer(0.2, self.publish_base_to_gimbal_transform, callback_group=None)
         self.create_timer(0.3, self.publish_map_to_odom_transform, callback_group=None)
+
+        # 预计算 base->gimbal 4x4 外参矩阵（缓存）
+        qx, qy, qz, qw = euler_to_quaternion(self.static_r_Gimbal, self.static_p_Gimbal, self.static_y_Gimbal)
+        R_bg = np.array([
+            [1-2*qy*qy-2*qz*qz,   2*qx*qy-2*qz*qw,     2*qx*qz+2*qy*qw],
+            [2*qx*qy+2*qz*qw,     1-2*qx*qx-2*qz*qz,   2*qy*qz-2*qx*qw],
+            [2*qx*qz-2*qy*qw,     2*qy*qz+2*qx*qw,     1-2*qx*qx-2*qy*qy]
+        ], dtype=np.float64)
+        self.T_base_gimbal = np.eye(4)
+        self.T_base_gimbal[:3,:3] = R_bg
+        self.T_base_gimbal[:3, 3] = np.array([self.static_X_Gimbal, self.static_Y_Gimbal, self.static_Z_Gimbal], dtype=np.float64)
 
         self.get_logger().info("MessageHandleNode 已启动")
 
@@ -100,10 +168,25 @@ class MessageHandleNode(Node):
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id  = self.base_frame
         t.child_frame_id   = self.utlidar_frame
-        t.transform.translation.x = self.static_tx
-        t.transform.translation.y = self.static_ty
-        t.transform.translation.z = self.static_tz
-        qx, qy, qz, qw = euler_to_quaternion(self.static_r, self.static_p, self.static_y)
+        t.transform.translation.x = self.static_X_Lidar
+        t.transform.translation.y = self.static_Y_Lidar
+        t.transform.translation.z = self.static_Z_Lidar
+        qx, qy, qz, qw = euler_to_quaternion(self.static_r_Lidar, self.static_p_Lidar, self.static_y_Lidar)
+        t.transform.rotation.x = qx
+        t.transform.rotation.y = qy
+        t.transform.rotation.z = qz
+        t.transform.rotation.w = qw
+        self.static_broadcaster.sendTransform([t])
+
+    def publish_base_to_gimbal_transform(self):
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id  = self.base_frame
+        t.child_frame_id   = self.gimbal_frame
+        t.transform.translation.x = self.static_X_Gimbal
+        t.transform.translation.y = self.static_Y_Gimbal
+        t.transform.translation.z = self.static_Z_Gimbal
+        qx, qy, qz, qw = euler_to_quaternion(self.static_r_Gimbal, self.static_p_Gimbal, self.static_y_Gimbal)
         t.transform.rotation.x = qx
         t.transform.rotation.y = qy
         t.transform.rotation.z = qz
@@ -195,6 +278,7 @@ class MessageHandleNode(Node):
         if self.odom_counter % 5 != 0:
             return
 
+        # 继续发布 odom->base_link 的 TF
         t = TransformStamped()
         t.header.stamp = msg.header.stamp
         t.header.frame_id  = self.odom_frame
@@ -204,6 +288,26 @@ class MessageHandleNode(Node):
         t.transform.translation.z = msg.pose.pose.position.z
         t.transform.rotation     = msg.pose.pose.orientation
         self.tf_broadcaster1.sendTransform(t)
+
+        # 直接用 Odom(odom->base) * (base->gimbal) 计算 odom->gimbal
+        T_odom_base   = pose_to_matrix(msg.pose.pose)         # 4x4
+        T_odom_gimbal = T_odom_base @ self.T_base_gimbal      # 4x4
+
+        odom_gimbal = Odometry()
+        odom_gimbal.header.stamp    = msg.header.stamp
+        odom_gimbal.header.frame_id = self.odom_frame
+        odom_gimbal.child_frame_id  = self.gimbal_frame
+        odom_gimbal.pose.pose       = matrix_to_pose(T_odom_gimbal)
+
+        # 暂无速度，置零
+        odom_gimbal.twist.twist.linear.x  = 0.0
+        odom_gimbal.twist.twist.linear.y  = 0.0
+        odom_gimbal.twist.twist.linear.z  = 0.0
+        odom_gimbal.twist.twist.angular.x = 0.0
+        odom_gimbal.twist.twist.angular.y = 0.0
+        odom_gimbal.twist.twist.angular.z = 0.0
+
+        self.pub_gimbal_odom.publish(odom_gimbal)
 
     def odom2d_callback(self, msg: Odometry):
         self.odom2d_counter += 1
