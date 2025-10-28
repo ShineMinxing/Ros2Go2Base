@@ -341,6 +341,7 @@ private:
         
                     Last_Operation_Time = this->get_clock()->now();
                     CurrentErrorCode = sport_client->Euler(0.0, PitchAngle, YawAngle);
+                    CurrentErrorCode = sport_client->BalanceStand();
                 }
                 break;
             case 22100000:
