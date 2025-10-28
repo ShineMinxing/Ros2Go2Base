@@ -270,21 +270,21 @@ private:
                 CurrentErrorCode = sport_client->SpeedLevel(1);
                 if(Value2==-1)
                 {
-                    Last_Operation = "Speed Scale 25%. ";
+                    Last_Operation = "Speed Scale 10%. ";
                     Last_Operation_Time = this->get_clock()->now();
-                    SpeedScalse = 0.25;
+                    SpeedScalse = 0.10;
                 }
                 else if(Value1==1)
                 {
-                    Last_Operation = "Speed Scale 50%. ";
+                    Last_Operation = "Speed Scale 20%. ";
                     Last_Operation_Time = this->get_clock()->now();
-                    SpeedScalse = 0.5;
+                    SpeedScalse = 0.20;
                 }
                 else if(Value1==-1)
                 {
-                    Last_Operation = "Speed Scale 75%. ";
+                    Last_Operation = "Speed Scale 50%. ";
                     Last_Operation_Time = this->get_clock()->now();
-                    SpeedScalse = 0.75;
+                    SpeedScalse = 0.50;
                 }
                 else if(Value2==1)
                 {
