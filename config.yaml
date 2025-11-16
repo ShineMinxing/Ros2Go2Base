@@ -69,6 +69,15 @@ message_handle_node:
     static_p_Gimbal: 0.0    # pitch
     static_y_Gimbal: 0.0    # yaw
 
+    # 静态 TF 从 base_link 到 base_imu 的 translation + RPY
+    imu_frame: "base_imu"
+    static_X_Imu: -0.02557
+    static_Y_Imu: 0.0
+    static_Z_Imu: 0.04232
+    static_r_Imu: 0.0
+    static_p_Imu: 0.0
+    static_y_Imu: 0.0
+
 sport_control_node:
   ros__parameters:
     # 网络接口

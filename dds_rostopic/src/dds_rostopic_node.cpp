@@ -25,6 +25,8 @@ public:
   DDSToRosNode(const rclcpp::NodeOptions &options)
   : Node("dds_rostopic_node", options)
   {
+    last_stamp_global_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
+
     // 读取参数，如果 YAML 里没配置，就用第二个参数里的默认值
     std::string network_if;
     this->get_parameter_or<std::string>(
@@ -114,11 +116,21 @@ public:
   }
 
 private:
+  rclcpp::Time last_stamp_global_;
+
   void CbPointCloud(const void* message)
   {
     auto dds_msg = static_cast<const sensor_msgs::msg::dds_::PointCloud2_*>(message);
     sensor_msgs::msg::PointCloud2 cloud;
-    cloud.header.stamp = this->get_clock()->now();
+
+    rclcpp::Time stamp = this->get_clock()->now();
+
+    if (stamp <= last_stamp_global_) {
+      return;
+    }
+    last_stamp_global_ = stamp;
+
+    cloud.header.stamp = stamp;
     cloud.header.frame_id = dds_msg->header().frame_id().empty()
                           ? "utlidar_lidar"
                           : dds_msg->header().frame_id();
@@ -149,6 +161,11 @@ private:
 
     /* ---------- ① IMU -> sensor_msgs/Imu ---------- */
     sensor_msgs::msg::Imu imu_msg;
+    if (stamp <= last_stamp_global_ + rclcpp::Duration::from_seconds(0.001)) {
+      return;
+    }
+    last_stamp_global_ = stamp;
+
     imu_msg.header.stamp    = stamp;
     imu_msg.header.frame_id = "base_imu";
 

@@ -110,21 +110,29 @@ class MessageHandleNode(Node):
         self.base_frame_2d   = p('base_frame_2d',  'base_link_2D').value
 
         self.utlidar_frame   = p('utlidar_frame',  'utlidar_lidar').value
-        self.static_X_Lidar = p('static_X_Lidar', 0.28945).value
-        self.static_Y_Lidar = p('static_Y_Lidar', 0.0).value
-        self.static_Z_Lidar = p('static_Z_Lidar', -0.046825).value
+        self.static_X_Lidar  = p('static_X_Lidar', 0.28945).value
+        self.static_Y_Lidar  = p('static_Y_Lidar', 0.0).value
+        self.static_Z_Lidar  = p('static_Z_Lidar', -0.046825).value
         self.static_r_Lidar  = p('static_r_Lidar',  0.0).value
         self.static_p_Lidar  = p('static_p_Lidar',  2.8782).value
         self.static_y_Lidar  = p('static_y_Lidar',  0.0).value
 
-        self.gimbal_frame   = p('gimbal_frame',  'gimbal').value
+        self.gimbal_frame    = p('gimbal_frame',  'gimbal').value
         self.pub_gimbal_odom_topic = p('pub_gimbal_odom_topic', '/SMX/Odom_gimbal').value
         self.static_X_Gimbal = p('static_X_Gimbal', 0.28945).value  # 注意：大写 X
         self.static_Y_Gimbal = p('static_Y_Gimbal', 0.0).value
         self.static_Z_Gimbal = p('static_Z_Gimbal', 0.18).value
-        self.static_r_Gimbal  = p('static_r_Gimbal',  0.0).value
-        self.static_p_Gimbal  = p('static_p_Gimbal',  0.0).value
-        self.static_y_Gimbal  = p('static_y_Gimbal',  0.0).value
+        self.static_r_Gimbal = p('static_r_Gimbal',  0.0).value
+        self.static_p_Gimbal = p('static_p_Gimbal',  0.0).value
+        self.static_y_Gimbal = p('static_y_Gimbal',  0.0).value
+
+        self.imu_frame       = p('imu_frame',  'base_imu').value
+        self.static_X_Imu    = p('static_X_Imu', -0.02557).value
+        self.static_Y_Imu    = p('static_Y_Imu', 0.0).value
+        self.static_Z_Imu    = p('static_Z_Imu', 0.04232).value
+        self.static_r_Imu    = p('static_r_Imu',  0.0).value
+        self.static_p_Imu    = p('static_p_Imu',  0.0).value
+        self.static_y_Imu    = p('static_y_Imu',  0.0).value
 
         # —— TF、订阅、发布 —— #
         self.tf_buffer    = tf2_ros.Buffer()
@@ -148,7 +156,8 @@ class MessageHandleNode(Node):
         # 发布静态 TF（用定时器重复广播，避免 RViz 启动时错过）
         self.create_timer(0.2, self.publish_base_to_utlidar_transform, callback_group=None)
         self.create_timer(0.2, self.publish_base_to_gimbal_transform, callback_group=None)
-        self.create_timer(0.3, self.publish_map_to_odom_transform, callback_group=None)
+        self.create_timer(0.2, self.publish_base_to_imu_transform, callback_group=None) 
+        self.create_timer(1.0, self.publish_map_to_odom_transform, callback_group=None)
 
         # 预计算 base->gimbal 4x4 外参矩阵（缓存）
         qx, qy, qz, qw = euler_to_quaternion(self.static_r_Gimbal, self.static_p_Gimbal, self.static_y_Gimbal)
@@ -187,6 +196,23 @@ class MessageHandleNode(Node):
         t.transform.translation.y = self.static_Y_Gimbal
         t.transform.translation.z = self.static_Z_Gimbal
         qx, qy, qz, qw = euler_to_quaternion(self.static_r_Gimbal, self.static_p_Gimbal, self.static_y_Gimbal)
+        t.transform.rotation.x = qx
+        t.transform.rotation.y = qy
+        t.transform.rotation.z = qz
+        t.transform.rotation.w = qw
+        self.static_broadcaster.sendTransform([t])
+    
+    def publish_base_to_imu_transform(self):
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id  = self.base_frame
+        t.child_frame_id   = self.imu_frame
+        t.transform.translation.x = self.static_X_Imu
+        t.transform.translation.y = self.static_Y_Imu
+        t.transform.translation.z = self.static_Z_Imu
+        qx, qy, qz, qw = euler_to_quaternion(
+            self.static_r_Imu, self.static_p_Imu, self.static_y_Imu
+        )
         t.transform.rotation.x = qx
         t.transform.rotation.y = qy
         t.transform.rotation.z = qz
@@ -278,9 +304,8 @@ class MessageHandleNode(Node):
         if self.odom_counter % 5 != 0:
             return
 
-        # 继续发布 odom->base_link 的 TF
         t = TransformStamped()
-        t.header.stamp = msg.header.stamp
+        t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id  = self.odom_frame
         t.child_frame_id   = self.base_frame
         t.transform.translation.x = msg.pose.pose.position.x
@@ -315,7 +340,7 @@ class MessageHandleNode(Node):
             return
 
         t = TransformStamped()
-        t.header.stamp = msg.header.stamp
+        t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id  = self.odom_frame
         t.child_frame_id   = self.base_frame_2d
         t.transform.translation.x = msg.pose.pose.position.x
