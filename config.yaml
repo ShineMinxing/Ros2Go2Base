@@ -45,7 +45,7 @@ message_handle_node:
     max_height: 10.0
 
     # TF frames
-    map_frame: "map"
+    map_frame: "map_0"
     odom_frame: "odom"
     base_frame: "base_link"
     base_frame_2d: "base_link_2D"
