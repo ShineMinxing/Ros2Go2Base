@@ -129,6 +129,33 @@ private:
     }
     void sendGoal(double x, double y, double yaw_degs)
     {
+        if (x == -999.999 && y == -999.999 && yaw_degs == -999.999)
+        {
+            // Ensure action client exists
+            if (!nav_to_pose_client) {
+                nav_to_pose_client = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(
+                    this->shared_from_this(), "navigate_to_pose");
+            }
+
+            // If action server is available, cancel goals
+            if (nav_to_pose_client->wait_for_action_server(std::chrono::seconds(1))) {
+                nav_to_pose_client->async_cancel_all_goals();
+                RCLCPP_WARN(this->get_logger(), "Terminate NAV: async_cancel_all_goals() requested.");
+            } else {
+                RCLCPP_WARN(this->get_logger(), "Terminate NAV: action server not available, only StopMove() will be sent.");
+            }
+
+            // Extra safety: stop robot motion immediately (prevents inertia / late cmd from nav2)
+            if (sport_client) {
+                sport_client->StopMove();
+            }
+
+            // Optional: clear patrol state if you want termination to stop patrol as well
+            // patrol_enable_ = false;
+
+            return;
+        }
+
         if (!nav_to_pose_client) {
             nav_to_pose_client = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(
                 this->shared_from_this(), "navigate_to_pose");
@@ -365,30 +392,8 @@ private:
                 Last_Operation_Time = this->get_clock()->now();
                 break;
             case 22262700:
-                if(Value1==1)
-                {
-                    Last_Operation = "Start Patrol. ";
-                    CurrentErrorCode = Vui_client->SetBrightness(3);
-                    startPatrol();
-                }
-                else if(Value1==-1)
-                {
-                    Last_Operation = "Go to Warehouse. ";
-                    CurrentErrorCode = Vui_client->SetBrightness(0);
-                    sendGoal(20, 1, 0);
-                }
-                else if(Value2==1)
-                {
-                    Last_Operation = "Stop Patrol. ";
-                    CurrentErrorCode = Vui_client->SetBrightness(0);
-                    stopPatrol();
-                }
-                else if(Value2==-1)
-                {
-                    Last_Operation = "Go To Start Point. ";
-                    CurrentErrorCode = Vui_client->SetBrightness(0);
-                    sendGoal(16.3, -0.85, 0);
-                }
+                Last_Operation = "Navigate to target. ";
+                sendGoal(Value1, Value2, Value3); 
                 Last_Operation_Time = this->get_clock()->now();
                 break;
             default:
@@ -407,7 +412,7 @@ int main(int argc, char *argv[])
         .automatically_declare_parameters_from_overrides(true)
         .arguments({
         "--ros-args",
-        "--params-file", "/home/unitree/ros2_ws/LeggedRobot/src/Ros2Go2Base/config.yaml"
+        "--params-file", "/home/smx/WorkSpace/GDS_LeggedRobot/src/Ros2Go2Base/config.yaml"
         });
     auto node = std::make_shared<SportControlNode>(options);
     rclcpp::spin(node);

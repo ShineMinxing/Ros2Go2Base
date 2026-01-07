@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     # 先在 Python 里把 '~' 展开成 '/home/你的用户名'
     rviz_config = os.path.expanduser(
-        '~/ros2_ws/LeggedRobot/src/Ros2Go2Base/other/SMXFE_odm.rviz'
+        '/home/smx/WorkSpace/GDS_LeggedRobot/srcRos2Go2Base/other/SMXFE_odm.rviz'
     )
 
     return LaunchDescription([

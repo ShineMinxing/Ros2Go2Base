@@ -1,22 +1,21 @@
-import launch
-from launch_ros.actions import Node
+import os
 from launch import LaunchDescription
-from launch.actions import ExecuteProcess, TimerAction  # 新增 TimerAction
+from launch_ros.actions import Node
 
 def generate_launch_description():
+    
+    # 【关键修改】修正了你之前的路径拼写错误 (src 和 Ros2Go2Base 之间缺了 /)
+    slam_params_file = '/home/smx/WorkSpace/GDS_LeggedRobot/src/Ros2Go2Base/other/slam_params.yaml'
+
+    # 使用 Node 直接启动，而不是调用外部终端
+    slam_toolbox_node = Node(
+        package='slam_toolbox',
+        executable='async_slam_toolbox_node',
+        name='slam_toolbox',
+        output='screen',
+        parameters=[slam_params_file]
+    )
+
     return LaunchDescription([
-        ExecuteProcess(
-            cmd=[
-                "x-terminal-emulator",
-                "--new-process",
-                "-e",
-                'bash',
-                '-c',
-                'source ~/.bashrc && '
-                'ros2 run slam_toolbox async_slam_toolbox_node --ros-args --params-file ~/ros2_ws/LeggedRobot/src/Ros2Go2Base/other/slam_params.yaml & '
-                'read -p "Press enter to close"'
-            ],
-            output="screen",
-        ),
-    ]
-)
+        slam_toolbox_node
+    ])

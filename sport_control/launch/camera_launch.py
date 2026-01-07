@@ -4,6 +4,13 @@ import os
 
 def generate_launch_description():
     return LaunchDescription([
+
+        Node(
+            package='g1_gimbal',
+            executable='g1_gimbal_node',
+            output='screen',
+        ),
+
         Node(
             package='ip_camera',
             executable='ip_camera_node',
@@ -53,9 +60,15 @@ def generate_launch_description():
         ),
 
         Node(
+            package='drone_estimator',
+            executable='drone_estimator_node',
+            output='screen',
+        ),
+
+        Node(
             package='rviz2', 
             executable='rviz2',
             output='screen',
-            arguments=['-d', os.path.expanduser('~/ros2_ws/LeggedRobot/src/Ros2Go2Base/other/SMXFE_odm.rviz')]
+            arguments=['-d', os.path.expanduser('/home/smx/WorkSpace/GDS_LeggedRobot/src/Ros2Go2Base/other/SMXFE_odm.rviz')]
         ),
     ])

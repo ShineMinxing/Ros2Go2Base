@@ -6,7 +6,7 @@
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-
+#include <mutex>
 
 // Unitree DDS
 #include <unitree/robot/channel/channel_subscriber.hpp>
@@ -25,7 +25,6 @@ public:
   DDSToRosNode(const rclcpp::NodeOptions &options)
   : Node("dds_rostopic_node", options)
   {
-    last_stamp_global_ = rclcpp::Time(0, 0, this->get_clock()->get_clock_type());
 
     // 读取参数，如果 YAML 里没配置，就用第二个参数里的默认值
     std::string network_if;
@@ -116,21 +115,28 @@ public:
   }
 
 private:
-  rclcpp::Time last_stamp_global_;
+  
+  std::mutex time_mutex_;
+  rclcpp::Time last_global_stamp_{0, 0, RCL_ROS_TIME};
+
+  rclcpp::Time GetMonotonicNow()
+  {
+      std::lock_guard<std::mutex> lock(time_mutex_);
+      rclcpp::Time now = this->get_clock()->now();
+      
+      // 如果当前时间 <= 上次记录的时间，强制 +1 纳秒
+      if (now <= last_global_stamp_) {
+          now = rclcpp::Time(last_global_stamp_.nanoseconds() + 1, RCL_ROS_TIME);
+      }
+      last_global_stamp_ = now;
+      return now;
+  }
 
   void CbPointCloud(const void* message)
   {
     auto dds_msg = static_cast<const sensor_msgs::msg::dds_::PointCloud2_*>(message);
     sensor_msgs::msg::PointCloud2 cloud;
 
-    rclcpp::Time stamp = this->get_clock()->now();
-
-    if (stamp <= last_stamp_global_) {
-      return;
-    }
-    last_stamp_global_ = stamp;
-
-    cloud.header.stamp = stamp;
     cloud.header.frame_id = dds_msg->header().frame_id().empty()
                           ? "utlidar_lidar"
                           : dds_msg->header().frame_id();
@@ -151,22 +157,22 @@ private:
     cloud.data.resize(dds_msg->data().size());
     memcpy(cloud.data.data(), dds_msg->data().data(), cloud.data.size());
     cloud.is_dense = dds_msg->is_dense();
+
+    rclcpp::Time now = GetMonotonicNow();
+    cloud.header.stamp = now + rclcpp::Duration(0, 5000000);
+
     pub_cloud_->publish(cloud);
   }
 
   void LowStateCallback(const void* message)
   {
     const auto& low_state = *static_cast<const unitree_go::msg::dds_::LowState_*>(message);
-    rclcpp::Time stamp = this->get_clock()->now();
+    
+    rclcpp::Time stamp = GetMonotonicNow();
 
-    /* ---------- ① IMU -> sensor_msgs/Imu ---------- */
     sensor_msgs::msg::Imu imu_msg;
-    if (stamp <= last_stamp_global_ + rclcpp::Duration::from_seconds(0.001)) {
-      return;
-    }
-    last_stamp_global_ = stamp;
-
-    imu_msg.header.stamp    = stamp;
+    
+    imu_msg.header.stamp = stamp;
     imu_msg.header.frame_id = "base_imu";
 
     /* RPY → Quaternion */
@@ -265,7 +271,7 @@ int main(int argc, char **argv)
     .automatically_declare_parameters_from_overrides(true)
     .arguments({
       "--ros-args",
-      "--params-file", "/home/unitree/ros2_ws/LeggedRobot/src/Ros2Go2Base/config.yaml"
+      "--params-file", "/home/smx/WorkSpace/GDS_LeggedRobot/src/Ros2Go2Base/config.yaml"
     });
 
   auto node = std::make_shared<DDSToRosNode>(options);

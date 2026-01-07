@@ -50,7 +50,7 @@ amcl:
 
 map_server:
   ros__parameters:
-    yaml_filename: "~/ros2_ws/LeggedRobot/src/Ros2Go2Base/local_file/map_new.yaml"
+    yaml_filename: "/home/smx/WorkSpace/GDS_LeggedRobot/srcRos2Go2Base/local_file/map_new.yaml"
 
 bt_navigator:
   ros__parameters:
@@ -59,7 +59,7 @@ bt_navigator:
     robot_base_frame: base_link_2D
     odom_topic: "/SMX/Odom"
     
-    default_bt_xml_filename: "/home/unitree/ros2_ws/LeggedRobot/src/Ros2Go2Estimator/other/Guide_waypoints.xml"
+    default_bt_xml_filename: "/home/smx/WorkSpace/GDS_LeggedRobot/src/Ros2Go2Estimator/other/Guide_waypoints.xml"
 
     ## ——下面这两段就是行为树里要用到的 {waypoint1}{waypoint2}——
     waypoint1:
