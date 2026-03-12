@@ -2,7 +2,7 @@ slam_toolbox:
   ros__parameters:
 
     # 重要的帧和话题名称
-    map_frame: map
+    map_frame: map_0
     odom_frame: odom
     base_frame: base_link_2D
     scan_topic: /SMX/Scan
