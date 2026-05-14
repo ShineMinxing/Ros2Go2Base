@@ -199,20 +199,33 @@ private:
     /* ---------- ② 关节/足端 -> Float64MultiArray ---------- */
     std_msgs::msg::Float64MultiArray joint_msg;
     /* 数据布置：
-      data[ 0..11] : 12× 关节位置  (q)
-      data[12..23] : 12× 关节速度  (dq)
-      data[24..27] : 4 × 足端力    (foot_force)
+      data[ 0..15]  : q   = FL_Hip, FL_Thigh, FL_Calf, FL_Wheel, FR_Hip, ...
+      data[16..31]  : dq  = FL_Hip, FL_Thigh, FL_Calf, FL_Wheel, FR_Hip, ...
+      data[32..47]  : tau = FL_Hip, FL_Thigh, FL_Calf, FL_Wheel, FR_Hip, ...
+      当前 Go2 无轮电机：
+      q   的 A[3 7 11 15] 置 0
+      dq  的 A[19 23 27 31] 置 0
+      tau 的 A[35 39 43 47] 置 0
+
+      使用足端压力传感器时：
+      FL/FR/RL/RR foot_force 放到 A[34 38 42 46]
     */
-    joint_msg.data.resize(28);
-    // 电机位置 & 速度
-    for (int leg = 0; leg < 4; ++leg) {
-        for (int i = 0; i < 3; ++i) {
-            int idx = leg * 3 + i;
-            joint_msg.data[idx]       = low_state.motor_state()[idx].q();      // 位置
-            joint_msg.data[12 + idx]  = low_state.motor_state()[idx].dq();     // 速度
+    joint_msg.data.assign(48, 0.0);
+
+    for (int leg = 0; leg < 4; ++leg)
+    {
+        for (int j = 0; j < 3; ++j)
+        {
+            const int src = leg * 3 + j;   // DDS / Go2 原始 12 电机索引
+            const int dst = leg * 4 + j;   // 新格式 16 电机索引，跳过 wheel 槽位
+
+            joint_msg.data[dst]      = low_state.motor_state()[src].q();
+            joint_msg.data[16 + dst] = low_state.motor_state()[src].dq();
         }
-        joint_msg.data[24 + leg] = low_state.foot_force()[leg];                // 足端力
+
+        joint_msg.data[32 + leg * 4 + 2] = low_state.foot_force()[leg];
     }
+
     pub_joint_->publish(joint_msg);
   }
 
